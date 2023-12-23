@@ -18,7 +18,7 @@ Deno.serve((request) => {
               src={`/${dist.jsHash}`}
             />
           </head>
-          <body style="height: 100%; margin: 0">
+          <body style="height: 100%; margin: 0;background: white;">
             <div id="root" style="height: 100%;">
               <App state={undefined} onClick={undefined} />
             </div>
