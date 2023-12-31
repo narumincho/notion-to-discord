@@ -84,9 +84,11 @@ const getTasksCompleted = async (
   warnLog: (text: string) => void,
 ): Promise<ReadonlyArray<Task>> => {
   const task: Task[] = [];
+  let cursor: string | undefined = undefined;
   while (true) {
     const taskCompleted = await notionClient.databases.query({
       database_id: "09570165012942c8bf11b78f71b52683",
+      start_cursor: cursor,
       filter: {
         type: "select",
         property: "ステータス",
@@ -126,9 +128,10 @@ const getTasksCompleted = async (
         }];
       }),
     );
-    if (taskCompleted.has_more) {
+    if (!taskCompleted.next_cursor) {
       return task;
     }
+    cursor = taskCompleted.next_cursor;
   }
 };
 
