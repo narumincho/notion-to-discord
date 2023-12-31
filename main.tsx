@@ -55,6 +55,20 @@ export const startServer = (
             const notionClient = new Client({
               auth: parameter.notionIntegrationSecret,
             });
+
+            controller.enqueue(
+              new TextEncoder().encode("ユーザー一覧を取得...\n"),
+            );
+            const userMap = await getUserMap(notionClient);
+            controller.enqueue(
+              new TextEncoder().encode(
+                JSON.stringify([...userMap], undefined, 2) + "\n",
+              ),
+            );
+
+            controller.enqueue(
+              new TextEncoder().encode("タスク一覧を取得...\n"),
+            );
             const taskList = await getTasksCompleted(notionClient, (log) => {
               controller.enqueue(new TextEncoder().encode(log + "\n"));
             });
@@ -63,6 +77,7 @@ export const startServer = (
                 JSON.stringify(taskList, undefined, 2) + "\n",
               ),
             );
+
             controller.enqueue(new TextEncoder().encode("完了!\n"));
           } catch (error) {
             controller.enqueue(new TextEncoder().encode(error + "\n"));
@@ -74,6 +89,36 @@ export const startServer = (
     }
     return new Response("Not Found", { status: 404 });
   });
+};
+
+const getUserMap = async (
+  notionClient: Client,
+): Promise<ReadonlyMap<string, string>> => {
+  const users = new Map<string, string>();
+  let cursor: string | undefined = undefined;
+  while (true) {
+    const response = await notionClient.databases.query({
+      database_id: "94fbeb491c7e43c6a550f09f91fe50fa",
+      start_cursor: cursor,
+    });
+    response.results.forEach((page) => {
+      if (!("properties" in page)) {
+        return;
+      }
+      const nameProperty = page.properties["名前"];
+      if (nameProperty.type !== "title") {
+        return;
+      }
+      users.set(
+        page.id,
+        nameProperty.title.map((item) => item.plain_text).join(""),
+      );
+    });
+    if (!response.next_cursor) {
+      return users;
+    }
+    cursor = response.next_cursor;
+  }
 };
 
 type Task = {
@@ -94,9 +139,9 @@ const getTasksCompleted = async (
       database_id: "09570165012942c8bf11b78f71b52683",
       start_cursor: cursor,
       filter: {
-        type: "select",
+        type: "status",
         property: "ステータス",
-        select: {
+        status: {
           equals: "完了",
         },
       },
