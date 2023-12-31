@@ -6,12 +6,35 @@ import { Client } from "https://deno.land/x/notion_sdk@v2.2.3/src/mod.ts";
 import { getTasksCompleted, setTaskCompletedAndCommented } from "./task.ts";
 import { commentToDiscord } from "./commentToDiscord.ts";
 
-export const startServer = (
+export const start = (
   parameter: {
     readonly notionIntegrationSecret: string;
     readonly discordWebHookUrl: string;
   },
 ): void => {
+  Deno.cron("task complete check", "* * * * *", async () => {
+    console.log("タスク通知 処理開始");
+    const notionClient = new Client({
+      auth: parameter.notionIntegrationSecret,
+    });
+    const taskList = await getTasksCompleted(notionClient, console.warn);
+    if (taskList.length === 0) {
+      console.log("タスクなし");
+      return;
+    }
+    const userMap = await getUserMap(notionClient);
+    for (const task of taskList) {
+      console.log(`タスク通知 ${task.id}`);
+      await commentToDiscord({
+        discordWebHookUrl: parameter.discordWebHookUrl,
+        task,
+        userMap,
+      });
+      await setTaskCompletedAndCommented(notionClient, task.id);
+    }
+    console.log("タスク通知 すべて完了");
+  });
+
   Deno.serve((request) => {
     const url = new URL(request.url);
     if (url.pathname === "/" && request.method === "GET") {
@@ -72,33 +95,8 @@ export const startServer = (
             );
 
             controller.enqueue(
-              new TextEncoder().encode("タスク一覧を取得...\n"),
+              new TextEncoder().encode("振り返り通知送信完了!\n"),
             );
-            const taskList = await getTasksCompleted(notionClient, (log) => {
-              controller.enqueue(new TextEncoder().encode(log + "\n"));
-            });
-            for (const task of taskList) {
-              controller.enqueue(
-                new TextEncoder().encode("タスク...\n"),
-              );
-
-              await commentToDiscord({
-                discordWebHookUrl: parameter.discordWebHookUrl,
-                task,
-                userMap,
-              });
-              await setTaskCompletedAndCommented(
-                notionClient,
-                task.id,
-              );
-            }
-            controller.enqueue(
-              new TextEncoder().encode(
-                JSON.stringify(taskList, undefined, 2) + "\n",
-              ),
-            );
-
-            controller.enqueue(new TextEncoder().encode("完了!\n"));
           } catch (error) {
             controller.enqueue(new TextEncoder().encode(error + "\n"));
           }

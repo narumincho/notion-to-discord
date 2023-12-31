@@ -1,4 +1,4 @@
-import { startServer } from "./main.tsx";
+import { start } from "./main.tsx";
 
 const notionIntegrationSecret = Deno.env.get("NOTION_INTEGRATION_SECRET");
 
@@ -12,7 +12,7 @@ if (!discordWebHookUrl) {
   throw new Error("DISCORD_WEBHOOK_URL is not set");
 }
 
-startServer({
+start({
   notionIntegrationSecret,
   discordWebHookUrl,
 });
