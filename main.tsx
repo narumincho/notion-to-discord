@@ -6,6 +6,32 @@ import { Client } from "https://deno.land/x/notion_sdk@v2.2.3/src/mod.ts";
 import { getTasksCompleted, setTaskCompletedAndCommented } from "./task.ts";
 import { commentToDiscord } from "./commentToDiscord.ts";
 
+export const notificationToDiscord = async (parameter: {
+  readonly notionIntegrationSecret: string;
+  readonly discordWebHookUrl: string;
+}): Promise<void> => {
+  console.log("タスク通知 処理開始");
+  const notionClient = new Client({
+    auth: parameter.notionIntegrationSecret,
+  });
+  const taskList = await getTasksCompleted(notionClient, console.warn);
+  if (taskList.length === 0) {
+    console.log("タスクなし");
+    return;
+  }
+  const userMap = await getUserMap(notionClient);
+  for (const task of taskList) {
+    console.log(`タスク通知 ${task.id}`);
+    await commentToDiscord({
+      discordWebHookUrl: parameter.discordWebHookUrl,
+      task,
+      userMap,
+    });
+    await setTaskCompletedAndCommented(notionClient, task.id);
+  }
+  console.log("タスク通知 すべて完了");
+};
+
 export const start = (
   parameter: {
     readonly notionIntegrationSecret: string;
@@ -13,26 +39,7 @@ export const start = (
   },
 ): void => {
   Deno.cron("task complete check", "* * * * *", async () => {
-    console.log("タスク通知 処理開始");
-    const notionClient = new Client({
-      auth: parameter.notionIntegrationSecret,
-    });
-    const taskList = await getTasksCompleted(notionClient, console.warn);
-    if (taskList.length === 0) {
-      console.log("タスクなし");
-      return;
-    }
-    const userMap = await getUserMap(notionClient);
-    for (const task of taskList) {
-      console.log(`タスク通知 ${task.id}`);
-      await commentToDiscord({
-        discordWebHookUrl: parameter.discordWebHookUrl,
-        task,
-        userMap,
-      });
-      await setTaskCompletedAndCommented(notionClient, task.id);
-    }
-    console.log("タスク通知 すべて完了");
+    await notificationToDiscord(parameter);
   });
 
   Deno.serve((request) => {
@@ -75,31 +82,10 @@ export const start = (
     }
     if (url.pathname === "/submit" && request.method === "POST") {
       const body = new ReadableStream<Uint8Array>({
-        start: async (controller) => {
+        start: (controller) => {
           controller.enqueue(
-            new TextEncoder().encode(`処理開始 ${new Date().toISOString()}\n`),
+            new TextEncoder().encode(`やっぱここでは何もしないことにしました`),
           );
-          try {
-            const notionClient = new Client({
-              auth: parameter.notionIntegrationSecret,
-            });
-
-            controller.enqueue(
-              new TextEncoder().encode("ユーザー一覧を取得...\n"),
-            );
-            const userMap = await getUserMap(notionClient);
-            controller.enqueue(
-              new TextEncoder().encode(
-                JSON.stringify([...userMap], undefined, 2) + "\n",
-              ),
-            );
-
-            controller.enqueue(
-              new TextEncoder().encode("振り返り通知送信完了!\n"),
-            );
-          } catch (error) {
-            controller.enqueue(new TextEncoder().encode(error + "\n"));
-          }
           controller.close();
         },
       });
