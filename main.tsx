@@ -51,18 +51,22 @@ export const startServer = (
           controller.enqueue(
             new TextEncoder().encode(`処理開始 ${new Date().toISOString()}\n`),
           );
-          const notionClient = new Client({
-            auth: parameter.notionIntegrationSecret,
-          });
-          const taskList = await getTasksCompleted(notionClient, (log) => {
-            controller.enqueue(new TextEncoder().encode(log + "\n"));
-          });
-          controller.enqueue(
-            new TextEncoder().encode(
-              JSON.stringify(taskList, undefined, 2) + "\n",
-            ),
-          );
-          controller.enqueue(new TextEncoder().encode("完了!\n"));
+          try {
+            const notionClient = new Client({
+              auth: parameter.notionIntegrationSecret,
+            });
+            const taskList = await getTasksCompleted(notionClient, (log) => {
+              controller.enqueue(new TextEncoder().encode(log + "\n"));
+            });
+            controller.enqueue(
+              new TextEncoder().encode(
+                JSON.stringify(taskList, undefined, 2) + "\n",
+              ),
+            );
+            controller.enqueue(new TextEncoder().encode("完了!\n"));
+          } catch (error) {
+            controller.enqueue(new TextEncoder().encode(error + "\n"));
+          }
           controller.close();
         },
       });
