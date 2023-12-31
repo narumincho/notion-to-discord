@@ -3,9 +3,14 @@ import { renderToString } from "https://esm.sh/preact-render-to-string@6.3.1?pin
 import { App } from "./app.tsx";
 import dist from "./dist.json" with { type: "json" };
 import { Client } from "https://deno.land/x/notion_sdk@v2.2.3/src/mod.ts";
+import { getTasksCompleted, setTaskCompletedAndCommented } from "./task.ts";
+import { commentToDiscord } from "./commentToDiscord.ts";
 
 export const startServer = (
-  parameter: { readonly notionIntegrationSecret: string },
+  parameter: {
+    readonly notionIntegrationSecret: string;
+    readonly discordWebHookUrl: string;
+  },
 ): void => {
   Deno.serve((request) => {
     const url = new URL(request.url);
@@ -72,6 +77,21 @@ export const startServer = (
             const taskList = await getTasksCompleted(notionClient, (log) => {
               controller.enqueue(new TextEncoder().encode(log + "\n"));
             });
+            for (const task of taskList) {
+              controller.enqueue(
+                new TextEncoder().encode("タスク...\n"),
+              );
+
+              await commentToDiscord({
+                discordWebHookUrl: parameter.discordWebHookUrl,
+                task,
+                userMap,
+              });
+              await setTaskCompletedAndCommented(
+                notionClient,
+                task.id,
+              );
+            }
             controller.enqueue(
               new TextEncoder().encode(
                 JSON.stringify(taskList, undefined, 2) + "\n",
@@ -120,110 +140,3 @@ const getUserMap = async (
     cursor = response.next_cursor;
   }
 };
-
-type Task = {
-  readonly id: string;
-  readonly name: string;
-  readonly lv: "Lv. 1" | "Lv. 10";
-  readonly userId: string;
-};
-
-const getTasksCompleted = async (
-  notionClient: Client,
-  warnLog: (text: string) => void,
-): Promise<ReadonlyArray<Task>> => {
-  const task: Task[] = [];
-  let cursor: string | undefined = undefined;
-  while (true) {
-    const taskCompleted = await notionClient.databases.query({
-      database_id: "09570165012942c8bf11b78f71b52683",
-      start_cursor: cursor,
-      filter: {
-        type: "status",
-        property: "ステータス",
-        status: {
-          equals: "完了",
-        },
-      },
-    });
-    task.push(
-      ...taskCompleted.results.flatMap<Task>((page) => {
-        if (!("properties" in page)) {
-          return [];
-        }
-        const nameProperty = page.properties["名前"];
-        if (nameProperty.type !== "title") {
-          warnLog(`名前がタイトルじゃない ${nameProperty.type}`);
-          return [];
-        }
-
-        const userProperty = page.properties["ユーザー"];
-        if (userProperty.type !== "relation") {
-          warnLog(`ユーザーがリレーションじゃない ${userProperty.type}`);
-          return [];
-        }
-
-        const lvProperty = page.properties["Lv"];
-        if (lvProperty.type !== "select") {
-          warnLog(`Lvがセレクトじゃない ${lvProperty.type}`);
-          return [];
-        }
-
-        return [{
-          id: page.id,
-          name: nameProperty.title.map((item) => item.plain_text).join(""),
-          lv: lvProperty.select?.name as Task["lv"],
-          userId: userProperty.relation[0].id,
-        }];
-      }),
-    );
-    if (!taskCompleted.next_cursor) {
-      return task;
-    }
-    cursor = taskCompleted.next_cursor;
-  }
-};
-
-const congratulatoryWords: ReadonlySet<string> = new Set([
-  "お疲れー。",
-  "まあ頑張ったんじゃない？",
-  "偉業の国…なんちゃって",
-  "はいはい。次は？",
-  "Tomopiloくんも喜んでるよ。",
-  "つるちゃんぬに負けるな！",
-  "しの抹茶くんも感激してる。",
-  "お餅くん、褒めてあげて？",
-  "一方Kish.はまだ寝てるみたい。",
-  "これにはヤソくんもにっこり。",
-  "らこちゃんもびっくりしてるよ。",
-  "じゃあ…そこのKish.さん、コメントをどうぞ",
-  "MINA君が焦ってる！",
-  "猪瀬君、これってすごいの？",
-  "特別にささやまくんから笹をプレゼント。",
-  "A2は　スーパーハイテンションになった！",
-  "はいはいえらいえらい。",
-  "褒めればいいんでしょ褒めれば。すごいねー。",
-  "もっと早くやれたような気はするけど。",
-  "お疲れさま。頑張ったじゃない。",
-  "ん。頑張ったねー。",
-  "まだやることあるでしょ？",
-  "…にやにやしないでよ。気持ち悪い。",
-  "で？",
-  "通知うざくない？大丈夫？",
-  "やる気を感じる。",
-  "で、君は？",
-  "カレーうどんくらいなら奢るけど。遠慮しなくていいよ。",
-  "まだまだこっから！",
-  "いいぞいいぞいいぞ！って感じ。",
-  "う〜ん これは :aiseru: かも。",
-  "ガンガンいきましょ！",
-  "可不ちゃんって呼ぶな！",
-]);
-
-/**
- * ランダムなねぎらいの言葉
- */
-const getRandomCongratulatoryWord = (): string =>
-  [
-    ...congratulatoryWords,
-  ][Math.floor(Math.random() * congratulatoryWords.size)];

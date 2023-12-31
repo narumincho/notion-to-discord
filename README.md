@@ -17,5 +17,5 @@ startServer({
 ```
 
 ```sh
-deno run --allow-net=:8000,api.notion.com --watch --check ./startInLocal.ts
+deno run --allow-net=:8000,api.notion.com,discord.com --watch --check ./startInLocal.ts
 ```
