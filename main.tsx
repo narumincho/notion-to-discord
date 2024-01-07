@@ -38,9 +38,9 @@ export const start = (
     readonly discordWebHookUrl: string;
   },
 ): void => {
-  Deno.cron("task complete check", "* * * * *", async () => {
-    await notificationToDiscord(parameter);
-  });
+  // Deno.cron("task complete check", "* * * * *", async () => {
+  //   await notificationToDiscord(parameter);
+  // });
 
   Deno.serve((request) => {
     const url = new URL(request.url);
